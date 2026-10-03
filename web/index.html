@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rogueball</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A pinball roguelike: Points × Mult, items, cards, bosses and antes.">
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0b0a14; }
+  canvas { display: block; width: 100%; height: 100%; outline: none; image-rendering: pixelated; }
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+             color: #ff6aa8; font: bold 20px monospace; letter-spacing: 4px; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="glcanvas" tabindex="1"></canvas>
+<div id="loading">LOADING…</div>
+<script src="mq_js_bundle.js"></script>
+<script src="rogueball.js"></script>
+<script>
+  load("rogueball.wasm");
+  // the first frame replaces the loading text
+  const hide = () => { const l = document.getElementById("loading"); if (l) l.remove(); };
+  setTimeout(function check() { if (typeof wasm_exports !== "undefined" && wasm_exports) hide(); else setTimeout(check, 100); }, 100);
+  document.getElementById("glcanvas").focus();
+</script>
+</body>
+</html>

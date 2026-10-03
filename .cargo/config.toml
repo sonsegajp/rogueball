@@ -1,0 +1,3 @@
+[target.wasm32-unknown-unknown]
+# quad-snd imports its audio functions from the page without declaring an import module
+rustflags = ["-C", "link-arg=--allow-undefined"]
