@@ -2,7 +2,7 @@
 
 A pinball roguelike that runs in the browser. Every table in a run is procedurally generated and play-tested by a bot before you see it. It's written in Rust (macroquad) and compiled to WebAssembly. The pixel art is pre-rendered from Blender, and the soundtrack comes from a Game Boy Advance style chip synth written for the game.
 
-**Play in the browser:** https://drewb583.github.io/rogueball/
+**Play in the browser:** https://sonsegajp.github.io/rogueball/
 
 ## Controls
 
