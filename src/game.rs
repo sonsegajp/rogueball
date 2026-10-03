@@ -107,34 +107,39 @@ impl Default for Meta {
 }
 
 
+/// one frame of the loading screen: the logo, a progress bar and what's happening
+async fn loading(font: &Font, logo: &Option<(Texture2D, Texture2D)>, frac: f32, label: &str) {
+    clear_background(hex(0x0b0a14));
+    let (w, h) = (screen_width(), screen_height());
+    let k = ((w / 960.0).min(h / 540.0)).floor().max(1.0);
+    let mut y = h * 0.28;
+    if let Some((tex, _)) = logo {
+        let (lw, lh) = (tex.width() * k, tex.height() * k);
+        draw_texture_ex(tex, ((w - lw) / 2.0).round(), (h * 0.42 - lh).round().max(0.0), WHITE, DrawTextureParams { dest_size: Some(vec2(lw, lh)), ..Default::default() });
+        y = h * 0.42 + 24.0 * k;
+    }
+    let bw = 300.0 * k;
+    let bx = ((w - bw) / 2.0).round();
+    draw_rectangle(bx - 2.0 * k, y - 2.0 * k, bw + 4.0 * k, 12.0 * k, hex(0x2e2063));
+    draw_rectangle(bx, y, bw, 8.0 * k, hex(0x120c2b));
+    let segs = 30;
+    let lit = (frac.clamp(0.0, 1.0) * segs as f32).round() as i32;
+    for i in 0..lit {
+        let sx = bx + i as f32 * bw / segs as f32;
+        draw_rectangle(sx + k, y + k, bw / segs as f32 - 2.0 * k, 6.0 * k, hex(if i % 2 == 0 { 0xff6aa8 } else { 0xe0337f }));
+    }
+    font.draw_outlined_centered(label, w / 2.0, y + 20.0 * k, 2.0 * k, hex(0xa596ec));
+    next_frame().await;
+}
+
 pub fn hex(c: u32) -> Color { Color::from_rgba((c >> 16) as u8, (c >> 8) as u8, c as u8, 255) }
 
 impl Game {
     pub async fn new() -> Game {
-        let layout = generate(&GenParams { seed: fastrand::u64(..), ante: 1, boss: false });
-        let db = Db::new();
-        let run = Run::new(&db, 0);
-        let physics = Physics::new(&layout);
-        let rules = Rules::new(&layout);
-        let meta: Meta = crate::platform::load("save.json").and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
-        let sfx_vol = meta.sfx_vol;
-        let mut card_art = HashMap::new();
-        // one painting per item and card, rendered by art/cards.py
-        let ids: Vec<&str> = db.items.iter().map(|d| d.id).chain(db.cards.iter().map(|d| d.id)).collect();
-        for id in ids {
-            if let Ok(bytes) = macroquad::file::load_file(&crate::assets::asset_path(&format!("cards/{id}.png"))).await {
-                let t = Texture2D::from_file_with_format(&bytes, Some(ImageFormat::Png));
-                t.set_filter(FilterMode::Nearest);
-                card_art.insert(id.to_string(), t);
-            }
-        }
-        let mods = run.mods(&db);
-        let kits = [Kit::load("s100").await, Kit::load("s80").await];
+        // the logo and font come first so the loading screen has something to show
         let font = Font::new();
-        let art = TableArt::build(&layout, &kits, &font);
-        let drops = layout.drops.len();
-        let logo = match macroquad::file::load_file(&crate::assets::asset_path("logo.png")).await {
-            Ok(bytes) => Image::from_file_with_format(&bytes, Some(ImageFormat::Png)).ok().map(|img| {
+        let logo = match crate::assets::read("logo.png").await {
+            Some(bytes) => Image::from_file_with_format(&bytes, Some(ImageFormat::Png)).ok().map(|img| {
                 // trim the empty margins, and make an all-white copy for the shine sweep
                 let (w, h) = (img.width as u32, img.height as u32);
                 let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
@@ -147,21 +152,43 @@ impl Game {
                 b.set_filter(FilterMode::Nearest);
                 (a, b)
             }),
-            Err(_) => None,
+            None => None,
         };
-        // render the soundtrack, showing progress while it builds
+        let steps = 4.0 + crate::music::SONGS.len() as f32;
+        loading(&font, &logo, 0.0, "WAXING THE PLAYFIELD").await;
+        let db = Db::new();
+        let run = Run::new(&db, 0);
+        let meta: Meta = crate::platform::load("save.json").and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        let mut card_art = HashMap::new();
+        // one painting per item and card, rendered by art/cards.py
+        let ids: Vec<&str> = db.items.iter().map(|d| d.id).chain(db.cards.iter().map(|d| d.id)).collect();
+        for id in ids {
+            if let Some(bytes) = crate::assets::read(&format!("cards/{id}.png")).await {
+                let t = Texture2D::from_file_with_format(&bytes, Some(ImageFormat::Png));
+                t.set_filter(FilterMode::Nearest);
+                card_art.insert(id.to_string(), t);
+            }
+        }
+        loading(&font, &logo, 1.0 / steps, "POLISHING THE FLIPPERS").await;
+        let kits = [Kit::load("s100").await, Kit::load("s80").await];
+        loading(&font, &logo, 2.0 / steps, "BUILDING A MACHINE").await;
+        let layout = generate(&GenParams { seed: fastrand::u64(..), ante: 1, boss: false });
+        let physics = Physics::new(&layout);
+        let rules = Rules::new(&layout);
+        let art = TableArt::build(&layout, &kits, &font);
+        let drops = layout.drops.len();
+        loading(&font, &logo, 3.0 / steps, "TUNING THE SOUND CHIP").await;
+        let mut sfx = Sfx::load().await;
+        sfx.volume = meta.sfx_vol;
+        // render the soundtrack, one song per step
         let mut music = crate::music::Music::new(meta.music_vol);
         for (i, name) in crate::music::SONGS.iter().enumerate() {
-            clear_background(hex(0x0b0a14));
-            let (w, h) = (screen_width(), screen_height());
-            let bw = w * 0.3;
-            draw_rectangle(w / 2.0 - bw / 2.0, h / 2.0, bw, 6.0, hex(0x2e2063));
-            draw_rectangle(w / 2.0 - bw / 2.0, h / 2.0, bw * i as f32 / crate::music::SONGS.len() as f32, 6.0, hex(0xff6aa8));
-            next_frame().await;
+            loading(&font, &logo, (4.0 + i as f32) / steps, "COMPOSING THE SOUNDTRACK").await;
             music.load(name).await;
         }
+        let mods = run.mods(&db);
         Game {
-            art, kits, factory: Factory::new(), previews: HashMap::new(), font, sfx: { let mut s = Sfx::load().await; s.volume = sfx_vol; s }, card_art,
+            art, kits, factory: Factory::new(), previews: HashMap::new(), font, sfx, card_art,
             layout, db, run, physics, rules, state: State::Title, paused: false, time: 0.0, acc: 0.0, alpha: 1.0,
             table: None, ball: Ball::default(), mods, shop: None, end: None, cash_lines: vec![],
             popups: vec![], sparks: vec![], banner: None, toasts: vec![], hits: HashMap::new(), shake: 0.0, scroll: 1055.0,

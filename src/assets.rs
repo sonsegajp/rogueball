@@ -18,6 +18,14 @@ impl Proj {
     }
 }
 
+mod embedded { include!(concat!(env!("OUT_DIR"), "/embedded.rs")); }
+
+/// an art file built into the binary (see build.rs), or read from disk/the server as a fallback
+pub async fn read(rel: &str) -> Option<Vec<u8>> {
+    if let Some((_, b)) = embedded::FILES.iter().find(|(p, _)| *p == rel) { return Some(b.to_vec()); }
+    macroquad::file::load_file(&asset_path(rel)).await.ok()
+}
+
 /// where an asset lives: next to the page on the web, found on disk on desktop
 pub fn asset_path(rel: &str) -> String {
     #[cfg(target_arch = "wasm32")]
@@ -52,12 +60,12 @@ impl Kit {
     /// the parts kit at one scale ("s100" is 1 px = 1 mm, "s80" is 0.8 px per mm for wide machines)
     pub async fn load(scale: &str) -> Kit {
         let mut sprites = HashMap::new();
-        let defs: HashMap<String, KitDef> = match macroquad::file::load_file(&asset_path(&format!("kit/{scale}/kit.json"))).await {
-            Ok(b) => serde_json::from_slice(&b).unwrap_or_default(),
-            Err(_) => HashMap::new(),
+        let defs: HashMap<String, KitDef> = match read(&format!("kit/{scale}/kit.json")).await {
+            Some(b) => serde_json::from_slice(&b).unwrap_or_default(),
+            None => HashMap::new(),
         };
         for (name, d) in defs {
-            if let Ok(bytes) = macroquad::file::load_file(&asset_path(&format!("kit/{scale}/{}", d.file))).await {
+            if let Some(bytes) = read(&format!("kit/{scale}/{}", d.file)).await {
                 let img = Image::from_file_with_format(&bytes, Some(ImageFormat::Png)).unwrap_or_else(|_| Image::gen_image_color(1, 1, BLANK));
                 let tex = Texture2D::from_image(&img);
                 tex.set_filter(FilterMode::Nearest);

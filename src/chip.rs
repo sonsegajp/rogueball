@@ -3,7 +3,8 @@
 //! with 8-bit PCM samples played at a low mixing rate through a short echo. Everything here renders
 //! offline into f32 buffers at 44.1 kHz; `crunch` gives the PCM bus its low-rate 8-bit grit.
 
-pub const SR: f32 = 44100.0;
+/// output rate: the PCM bus is crunched to 13 kHz anyway, so 22 kHz loses nothing and renders twice as fast
+pub const SR: f32 = 22050.0;
 /// a common mixing rate for GBA sound engines
 pub const PCM_RATE: f32 = 13379.0;
 
@@ -104,7 +105,7 @@ impl Echo {
     }
 }
 
-/// 16-bit mono WAV at 44.1 kHz
+/// 16-bit mono WAV at SR
 pub fn wav(samples: &[f32]) -> Vec<u8> {
     let mut out = Vec::with_capacity(44 + samples.len() * 2);
     let data_len = (samples.len() * 2) as u32;
